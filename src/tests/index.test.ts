@@ -10,6 +10,7 @@ import {
   parseLectureStatus,
   reconstructedLecture,
 } from '../iCalConverter';
+import { buildCalendarEvents } from '../googleEvents';
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -73,6 +74,25 @@ describe('강의 데이터 처리하기', () => {
     });
 
     expect(mergeLectures(reconstructedLectures)).toEqual(expected);
+  });
+
+  test('구글 캘린더 이벤트로 변환', () => {
+    const events = buildCalendarEvents([cases.online.input]);
+    expect(events).toEqual([
+      {
+        summary: '소프트웨어분석및설계 - 온라인(녹화)',
+        description: '담당: 김수균',
+        start: {
+          dateTime: '2024-09-09T10:00:00+09:00',
+          timeZone: 'Asia/Seoul',
+        },
+        end: {
+          dateTime: '2024-09-09T10:50:00+09:00',
+          timeZone: 'Asia/Seoul',
+        },
+        location: undefined,
+      },
+    ]);
   });
 });
 

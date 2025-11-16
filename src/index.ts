@@ -1,34 +1,71 @@
 import puppeteer from 'puppeteer';
 import { Value } from '@sinclair/typebox/value';
-import { upload } from './aws';
-import { username, password, START_YYYYMMDD, END_YYYYMMDD } from './env';
-import { iCalConverter } from './iCalConverter';
-import { ResponseTObject } from './response';
 
-(async () => {
+import { ResponseTObject } from './response';
+import { iCalConverter } from './iCalConverter';
+import { syncGoogleCalendar } from './googleCalendar';
+import {
+  username,
+  password,
+  START_YYYYMMDD,
+  END_YYYYMMDD,
+  ENABLE_S3_UPLOAD,
+  SYNC_INTERVAL_HOURS,
+} from './env';
+
+const TIMETABLE_ENDPOINT = 'https://portal.jejunu.ac.kr/api/patis/timeTable.jsp';
+
+async function fetchClassTables() {
   const browser = await puppeteer.launch();
   const page = await browser.newPage();
 
-  await page.goto('https://portal.jejunu.ac.kr/login.htm');
+  try {
+    await page.goto('https://portal.jejunu.ac.kr/login.htm');
+    await page.type('#userId', username);
+    await page.type('#userPswd', password);
+    await page.click('[type="submit"]');
+    await page.waitForNavigation();
 
-  await page.type('#userId', username);
-  await page.type('#userPswd', password);
+    const response = await page.goto(
+      `${TIMETABLE_ENDPOINT}?sttLsnYmd=${START_YYYYMMDD}&endLsnYmd=${END_YYYYMMDD}`
+    );
 
-  await page.click('[type="submit"]');
+    if (!response?.ok()) throw new Error('Failed to fetch the data');
 
-  await page.waitForNavigation();
+    const { classTables } = Value.Parse(ResponseTObject, await response.json());
+    return classTables;
+  } finally {
+    await browser.close();
+  }
+}
 
-  const response = await page.goto(
-    `https://portal.jejunu.ac.kr/api/patis/timeTable.jsp?sttLsnYmd=${START_YYYYMMDD}&endLsnYmd=${END_YYYYMMDD}`
+async function syncOnce() {
+  console.info(`[${new Date().toISOString()}] Fetching timetable...`);
+  const classTables = await fetchClassTables();
+
+  const { inserted, deleted } = await syncGoogleCalendar(classTables);
+  console.info(
+    `Google Calendar synced (inserted: ${inserted}, removed: ${deleted})`
   );
 
-  if (response?.ok()) {
-    const { classTables } = Value.Parse(ResponseTObject, await response.json());
+  if (ENABLE_S3_UPLOAD) {
+    const { upload } = await import('./aws');
+    await upload(iCalConverter(classTables));
+    console.info('ICS feed uploaded to S3');
+  }
+}
 
-    upload(iCalConverter(classTables));
-  } else {
-    console.error('Failed to fetch the data');
+async function run() {
+  try {
+    await syncOnce();
+  } catch (error) {
+    console.error('Failed to sync timetable', error);
   }
 
-  await browser.close();
-})();
+  if (SYNC_INTERVAL_HOURS > 0) {
+    const interval = SYNC_INTERVAL_HOURS * 60 * 60 * 1000;
+    setTimeout(run, interval);
+  }
+}
+
+run();

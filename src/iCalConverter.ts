@@ -76,6 +76,9 @@ export function mergeLectures(lectures: ReconstructedLecture[]) {
         })();
 
         previousLecture.endTime = lecture.endTime;
+        previousLecture.status = status;
+        if (lecture.location && !previousLecture.location)
+          previousLecture.location = lecture.location;
       } else {
         reducing.push(lecture);
       }
@@ -84,21 +87,8 @@ export function mergeLectures(lectures: ReconstructedLecture[]) {
     }, [] as Exclude<ReconstructedLecture, null>[]);
 }
 
-export function lectureToICalEvent(
-  lecture: Exclude<ReconstructedLecture, null>
-): string {
-  return `BEGIN:VEVENT
-DTSTART;TZID=Asia/Seoul:${lecture.startTime}
-DTEND;TZID=Asia/Seoul:${lecture.endTime}
-SUMMARY:${lecture.name}${
-    lecture.status !== '일반' ? ` - ${lecture.status}` : ''
-  }${lecture.location ? `\nLOCATION:${lecture.location}` : ''}
-DESCRIPTION:${lecture.lecturer}
-END:VEVENT`.trim();
-}
-
-export function iCalConverter(lectures: Lecture[]) {
-  const reconstructedLectures = lectures
+export function toReconstructedLectures(lectures: Lecture[]) {
+  return lectures
     .filter(
       (lecture): lecture is Exclude<Lecture, null> =>
         lecture !== null && lecture.bgngHr !== null && lecture.endHr !== null
@@ -116,8 +106,23 @@ export function iCalConverter(lectures: Lecture[]) {
         iCalDateStringToDateObject(a.startTime).getTime() -
         iCalDateStringToDateObject(b.startTime).getTime()
     );
+}
 
-  const events = mergeLectures(reconstructedLectures)
+export function lectureToICalEvent(
+  lecture: Exclude<ReconstructedLecture, null>
+): string {
+  return `BEGIN:VEVENT
+DTSTART;TZID=Asia/Seoul:${lecture.startTime}
+DTEND;TZID=Asia/Seoul:${lecture.endTime}
+SUMMARY:${lecture.name}${
+    lecture.status !== '일반' ? ` - ${lecture.status}` : ''
+  }${lecture.location ? `\nLOCATION:${lecture.location}` : ''}
+DESCRIPTION:${lecture.lecturer}
+END:VEVENT`.trim();
+}
+
+export function iCalConverter(lectures: Lecture[]) {
+  const events = mergeLectures(toReconstructedLectures(lectures))
     .map(lectureToICalEvent)
     .join('\n\n');
   return `BEGIN:VCALENDAR
