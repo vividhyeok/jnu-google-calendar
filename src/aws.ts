@@ -1,6 +1,9 @@
 import { PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY } from './env';
 
+if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY)
+  throw new Error('AWS credentials are not configured');
+
 const client = new S3Client({
   region: 'ap-northeast-2',
   credentials: {

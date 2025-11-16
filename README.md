@@ -25,6 +25,34 @@
 
 이전보다 시간표 변동 사항을 기기에서 바로 확인하는 편리한 경험을 누리고 있는 중입니다.
 
+## Google 캘린더 자동 동기화
+
+아이폰 없이도 갤럭시 스마트폰/태블릿/워치 등에서 곧바로 강의 일정을 확인할 수 있도록, `.ics` 파일을 별도로 구독하지 않아도 일정이 Google 캘린더에 직접 반영되도록 파이프라인을 확장했습니다. 서비스 계정이 추가된 캘린더를 본인의 Google 계정에서 한 번만 구독하면, 동일 계정이 로그인된 모든 안드로이드 기기에서 자동으로 동기화되어 휴강/보강 정보도 실시간으로 확인할 수 있습니다.
+
+1. [Google Cloud Console](https://console.cloud.google.com/)에서 새 프로젝트를 생성하고 **Calendar API**를 활성화합니다.
+2. 서비스 계정을 만든 뒤 JSON 키를 발급 받아 `client_email`, `private_key` 값을 확보합니다.
+3. Google Calendar 웹에서 동기화 대상 캘린더의 `캘린더 설정 → 특정 사용자와 공유` 메뉴에 서비스 계정 이메일을 추가하고, **변경 및 공유 관리** 권한을 부여합니다.
+4. 아래 예시처럼 `.env.local` 파일을 작성합니다. `GOOGLE_CALENDAR_ID` 값은 동기화 대상 캘린더의 ID(예: `abc123@group.calendar.google.com`)입니다.
+
+```ini
+username=제주대-포털-아이디
+password=제주대-포털-비밀번호
+START_YYYYMMDD=20240902
+END_YYYYMMDD=20241221
+GOOGLE_CLIENT_EMAIL=service-account@project.iam.gserviceaccount.com
+GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+GOOGLE_CALENDAR_ID=abc123@group.calendar.google.com
+SYNC_INTERVAL_HOURS=24
+# 선택 사항: 기존과 동일하게 S3에 .ics 파일을 올리고 싶다면 아래 두 값을 채우고 ENABLE_S3_UPLOAD=true 로 설정합니다.
+ENABLE_S3_UPLOAD=false
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+```
+
+`SYNC_INTERVAL_HOURS`에 24를 입력하면 하루에 한 번씩 자동으로 포털에서 데이터를 갱신하고, `0`으로 두면 단발 실행만 수행합니다. Render, Fly.io, Google Cloud Run Jobs 같이 무료/저비용으로 cron 작업을 제공하는 환경에 배포하면 관리 부담 없이 매일 동기화가 가능합니다.
+
+Google Calendar API를 직접 호출하기 때문에 별도의 스토리지나 프리미엄 기능 없이도 안드로이드 생태계 전반에서 동일한 일정을 확인할 수 있습니다.
+
 ## 테스트 주도 구현
 
 휴강, 보강, 연강 등 다양한 경우를 포함한 제주대학교 포털의 [강의 시간표 데이터 스키마를 분류](src/response.ts#L44)하고, 이를 작업 과정에서 보다 쉽게 식별할 수 있도록 [재구성한 강의 형식]을 준비했습니다. 각 경우에 적합한 입력 데이터를 준비하고, 해당 데이터의 기대 출력도 함께 정의하여 테스트에 활용했습니다.
@@ -56,6 +84,18 @@
 > 예) https://portal.jejunu.ac.kr/api/patis/timeTable.jsp?sttLsnYmd=20240902&endLsnYmd=20241221
 
 위 HTTP GET 요청 전 제주대학교 포털 로그인을 거쳐야 합니다.
+
+### 환경 변수 요약
+
+| 키 | 설명 |
+| --- | --- |
+| `username`, `password` | 제주대 포털 로그인 계정 |
+| `START_YYYYMMDD`, `END_YYYYMMDD` | 가져올 시간표 조회 범위 |
+| `GOOGLE_CLIENT_EMAIL`, `GOOGLE_PRIVATE_KEY` | Google Cloud 서비스 계정 인증 정보 |
+| `GOOGLE_CALENDAR_ID` | 동기화 대상 Google 캘린더 ID |
+| `SYNC_INTERVAL_HOURS` | 자동 동기화 주기(0이면 단발 실행) |
+| `ENABLE_S3_UPLOAD` | `true`일 때만 AWS S3 업로드 로직 실행 |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | S3 업로드용 자격 증명 (선택) |
 
 ### 응답 예시
 
