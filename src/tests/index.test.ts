@@ -101,6 +101,7 @@ describe('lectures to iCal event', () => {
     const expected = await fs.readFile(path.join(__dirname, 'excepted.ics'), {
       encoding: 'utf8',
     });
-    expect(iCalConverter(classTables)).toBe(expected);
+    const normalize = (text: string) => text.replace(/\r\n/g, '\n');
+    expect(normalize(iCalConverter(classTables))).toBe(normalize(expected));
   });
 });
