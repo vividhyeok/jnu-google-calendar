@@ -2,6 +2,8 @@ import { syncGoogleCalendar } from './googleCalendar';
 import { SYNC_INTERVAL_HOURS } from './env';
 import { fetchPortalLectures } from './portalClient';
 
+const RUN_ONCE = process.argv.includes('--once') || SYNC_INTERVAL_HOURS === 0;
+
 async function syncOnce() {
   console.info(`[${new Date().toISOString()}] Fetching timetable...`);
   const classTables = await fetchPortalLectures();
@@ -20,10 +22,10 @@ async function run() {
     console.error('Failed to sync timetable', error);
   }
 
-  if (SYNC_INTERVAL_HOURS > 0) {
-    const interval = SYNC_INTERVAL_HOURS * 60 * 60 * 1000;
-    setTimeout(run, interval);
-  }
+  if (RUN_ONCE) return;
+
+  const interval = SYNC_INTERVAL_HOURS * 60 * 60 * 1000;
+  setTimeout(run, interval);
 }
 
 run();

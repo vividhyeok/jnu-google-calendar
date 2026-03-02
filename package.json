@@ -1,7 +1,8 @@
 {
   "scripts": {
     "test": "vitest run",
-    "start": "node -r @swc-node/register src/index.ts --env-file"
+    "start": "node -r @swc-node/register src/index.ts",
+    "sync": "node -r @swc-node/register src/index.ts --once"
   },
   "devDependencies": {
     "@types/node": "^22.5.4",

@@ -76,6 +76,27 @@ describe('강의 데이터 처리하기', () => {
     expect(mergeLectures(reconstructedLectures)).toEqual(expected);
   });
 
+  test('동일 과목이라도 시간 간격이 크면 병합하지 않아야 함', () => {
+    const base = cases.merge.input[0];
+    const first = { ...base, bgngHr: '09:00', endHr: '09:50' };
+    const second = { ...base, bgngHr: '13:00', endHr: '13:50' };
+
+    const merged = mergeLectures(
+      [first, second]
+        .map((lecture) =>
+          reconstructedLecture(lecture, parseLectureStatus(lecture))
+        )
+        .filter(
+          (
+            lecture
+          ): lecture is Exclude<ReturnType<typeof reconstructedLecture>, null> =>
+            lecture !== null
+        )
+    );
+
+    expect(merged).toHaveLength(2);
+  });
+
   test('구글 캘린더 이벤트로 변환', () => {
     const events = buildCalendarEvents([cases.online.input]);
     expect(events).toEqual([

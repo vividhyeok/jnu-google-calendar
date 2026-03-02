@@ -1,98 +1,152 @@
-# 📅 제주대학교 시간표 → Google Calendar 자동 동기화 서버
+﻿# 📅 제주대학교 시간표 → Google Calendar 자동 동기화
 
-제주대학교 포털에서 강의 시간표를 가져와 Google Calendar에 동기화하는 개인용 스케줄러입니다.
+제주대학교 포털 시간표 API를 주기적으로 가져와 Google Calendar에 동기화하는 개인용 프로젝트입니다.
 
-> **출처:**
-> 기반 프로젝트 — [https://github.com/mu-hun/jejunu-icalendar-server](https://github.com/mu-hun/jejunu-icalendar-server)
+이 프로젝트는 안드로이드/윈도우 사용자 기준으로 운영하기 쉽도록 구성되어 있습니다.
 
----
+## 1. 동작 방식
 
-# 1. Google Calendar 및 서비스 계정 설정
+1. 포털 로그인 후 기간(`START_YYYYMMDD` ~ `END_YYYYMMDD`)의 `classTables` 데이터를 조회합니다.
+2. 휴강/보강/온라인 수업 상태를 해석해 캘린더 이벤트로 변환합니다.
+3. Google Calendar의 동일 기간 이벤트를 먼저 정리한 뒤, 새 이벤트를 다시 넣습니다.
+4. 포털 데이터가 갱신되면(휴강/보강 변경 포함) 다음 실행 시 캘린더에도 반영됩니다.
 
-## 1-1. 동기화용 Google Calendar 생성
+## 2. 사전 준비
 
-1. [https://calendar.google.com](https://calendar.google.com) 접속
-2. 왼쪽 **기타 캘린더 → + → 새 캘린더 만들기**
-3. 캘린더 생성 후 **설정 및 공유**에서 **캘린더 ID 복사**
+1. Node.js 22 이상
+2. Google 계정
+3. 제주대학교 포털 계정
+4. 동기화용 Google Calendar 1개
+5. Google Cloud 서비스 계정 1개
 
-   * 예: `abc123@group.calendar.google.com`
+## 3. Google Calendar/Service Account 설정
 
----
+1. `https://calendar.google.com`에서 동기화 전용 캘린더를 생성합니다.
+2. 캘린더 설정에서 `캘린더 ID`를 복사합니다.
+3. `https://console.cloud.google.com`에서 프로젝트를 생성합니다.
+4. `Google Calendar API`를 활성화합니다.
+5. `IAM & Admin > Service Accounts`에서 서비스 계정을 생성합니다.
+6. 서비스 계정 키(JSON)를 발급합니다.
+7. JSON의 `client_email`, `private_key`를 환경변수에 사용합니다.
+8. Google Calendar 공유 설정에서 서비스 계정 이메일에 `변경 및 공유 관리` 권한을 부여합니다.
 
-## 1-2. Google Cloud 서비스 계정 생성
+## 4. 로컬 실행 (Windows 기준)
 
-1. [https://console.cloud.google.com](https://console.cloud.google.com)
-2. 프로젝트 생성
-3. **APIs & Services → Library → Google Calendar API 활성화**
-4. **IAM & Admin → Service Accounts → 서비스 계정 생성**
-5. 서비스 계정 → **Keys → Add Key → JSON**
-6. JSON 파일에서 다음 값 사용
+1. 저장소 이동 후 의존성 설치
 
-   * `client_email` → `GOOGLE_CLIENT_EMAIL`
-   * `private_key` → `GOOGLE_PRIVATE_KEY`
+```powershell
+npm install
+```
 
----
+2. 환경 파일 생성
 
-## 1-3. 서비스 계정을 Google Calendar에 권한 부여
+```powershell
+Copy-Item .env.example .env.local
+```
 
-1. 생성한 캘린더의 설정 페이지 이동
-2. **특정 사용자와 공유**에서 서비스 계정 이메일 추가
-3. 권한: **변경 및 공유 관리(Manage changes and sharing)**
+3. `.env.local` 수정
 
----
+```env
+PORTAL_USERNAME=포털아이디
+PORTAL_PASSWORD=포털비밀번호
+START_YYYYMMDD=20250901
+END_YYYYMMDD=20251231
+GOOGLE_CLIENT_EMAIL=service-account@project.iam.gserviceaccount.com
+GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+GOOGLE_CALENDAR_ID=xxxx@group.calendar.google.com
+SYNC_INTERVAL_HOURS=0
+```
 
-# 2. GitHub 저장소 설정
+4. 1회 동기화 실행
 
-## 2-1. 저장소 복사
+```powershell
+npm run sync
+```
 
-1. 이 저장소를 **Fork**하거나 GitHub에 직접 Push
+5. 주기 실행(로컬 데몬 형태)
 
----
+```powershell
+npm run start
+```
 
-## 2-2. GitHub Actions 환경 변수 설정
+## 5. 실행 명령어
 
-GitHub 저장소 →
-**Settings → Secrets and variables → Actions**
+- `npm run sync`: 1회 실행 후 종료
+- `npm run start`: `SYNC_INTERVAL_HOURS` 간격 반복 실행
+- `npm test`: 변환 로직 테스트 실행
 
-### Repository secrets
+## 6. 환경변수 설명
 
-| 이름                    | 값                     |
-| --------------------- | --------------------- |
-| `PORTAL_USERNAME`     | 제주대 포털 아이디            |
-| `PORTAL_PASSWORD`     | 제주대 포털 비밀번호           |
-| `GOOGLE_CLIENT_EMAIL` | 서비스 계정 client_email   |
-| `GOOGLE_PRIVATE_KEY`  | 서비스 계정 private_key 전체 |
-| `GOOGLE_CALENDAR_ID`  | 캘린더 ID                |
+| 이름 | 필수 | 설명 |
+| --- | --- | --- |
+| `PORTAL_USERNAME` | O | 제주대 포털 아이디 |
+| `PORTAL_PASSWORD` | O | 제주대 포털 비밀번호 |
+| `START_YYYYMMDD` | O | 조회 시작일 (`YYYYMMDD`) |
+| `END_YYYYMMDD` | O | 조회 종료일 (`YYYYMMDD`) |
+| `GOOGLE_CLIENT_EMAIL` | O | 서비스 계정 `client_email` |
+| `GOOGLE_PRIVATE_KEY` | O | 서비스 계정 `private_key` 전체 문자열 |
+| `GOOGLE_CALENDAR_ID` | O | 동기화 대상 캘린더 ID |
+| `SYNC_INTERVAL_HOURS` | X | 반복 실행 간격(시간), 기본값 `24`, `0`이면 1회 실행 |
 
-### Repository variables
+참고:
+- 기존 `username`, `password`도 하위 호환으로 인식됩니다.
+- `GOOGLE_PRIVATE_KEY`는 줄바꿈을 `\n` 형태로 유지해야 합니다.
+- `START_YYYYMMDD`와 `END_YYYYMMDD`는 유효한 날짜 형식이어야 합니다.
 
-| 이름               | 값                      |
-| ---------------- | ---------------------- |
-| `START_YYYYMMDD` | 학기 시작일 (예: `20240902`) |
-| `END_YYYYMMDD`   | 학기 종료일 (예: `20241221`) |
+## 7. GitHub Actions 자동 실행
 
----
+### 7-1. Repository Secrets
 
-# 3. GitHub Actions 실행
+- `PORTAL_USERNAME`
+- `PORTAL_PASSWORD`
+- `GOOGLE_CLIENT_EMAIL`
+- `GOOGLE_PRIVATE_KEY`
+- `GOOGLE_CALENDAR_ID`
 
-1. GitHub 저장소 상단 **Actions** 탭 이동
-2. 비활성화된 경우 **Enable Actions**
-3. 왼쪽에서 **cron** 워크플로 선택
-4. 오른쪽 상단 **Run workflow → main** 실행
-5. 실행 로그에서 동기화 성공 여부 확인
+### 7-2. Repository Variables
 
----
+- `START_YYYYMMDD`
+- `END_YYYYMMDD`
 
-# 4. Google Calendar 확인
+### 7-3. 스케줄
 
-1. [https://calendar.google.com](https://calendar.google.com)
-2. 동기화용 캘린더 표시 활성화
-3. 지정한 학기 기간에 일정이 생성되었는지 확인
+- 워크플로 파일: `.github/workflows/cron.yml`
+- 현재 cron: `0 1 * * *` (UTC 기준 매일 01:00)
+- 한국 시간(KST, UTC+9) 기준: 매일 10:00 실행
 
----
+### 7-4. 수동 실행
 
-# 5. 갤럭시 기기 연동 (선택)
+1. GitHub 저장소 `Actions` 탭 이동
+2. `cron` 워크플로 선택
+3. `Run workflow` 실행
 
-1. 갤럭시 스마트폰 → **설정 → 계정 및 백업 → 계정 관리**
-2. 동일 Google 계정 로그인
-3. Samsung Calendar 앱 → **캘린더 관리**에서 동기화 캘린더 활성화
+## 8. 자주 발생하는 문제
+
+1. `pnpm is not recognized`
+- `npm install`, `npm run sync`로 그대로 실행하면 됩니다.
+
+2. `Missing environment variable`
+- `.env.local` 파일명/키 이름 오타를 확인하세요.
+- GitHub Actions라면 Secrets/Variables 이름이 README와 정확히 일치해야 합니다.
+
+3. `Portal login failed`
+- 포털 계정 정보가 틀렸거나 일시적으로 로그인 세션이 실패한 경우입니다.
+- 코드에서 자동 재시도 후에도 실패하면 계정 정보를 다시 확인하세요.
+
+4. Google API 429/5xx
+- 일시적인 quota/서버 이슈일 수 있습니다.
+- 코드에서 자동 재시도하며, 계속 실패하면 잠시 후 재실행하세요.
+
+5. 일정이 비어 보임
+- 조회 기간(`START_YYYYMMDD`, `END_YYYYMMDD`)이 실제 학기 범위를 포함하는지 확인하세요.
+- 포털 API 응답에서 `classTables`가 비어 있는지 먼저 확인하세요.
+
+## 9. 운영 팁
+
+- 학기 변경 시 가장 먼저 `START_YYYYMMDD`, `END_YYYYMMDD`만 갱신하세요.
+- 테스트는 배포 전 `npm test` 1회 실행해두면 안전합니다.
+- 서비스 계정 키는 절대 저장소에 커밋하지 마세요.
+
+## 10. 기반 프로젝트
+
+- https://github.com/mu-hun/jejunu-icalendar-server

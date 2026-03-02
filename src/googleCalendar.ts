@@ -3,16 +3,32 @@ import crypto from 'node:crypto';
 import type { Lecture } from './response';
 import { buildCalendarEvents } from './googleEvents';
 import {
+  END_YYYYMMDD,
   GOOGLE_CALENDAR_ID,
   GOOGLE_CLIENT_EMAIL,
   GOOGLE_PRIVATE_KEY,
+  START_YYYYMMDD,
 } from './env';
+import { withRetry } from './retry';
 
 const GOOGLE_TOKEN_AUDIENCE = 'https://oauth2.googleapis.com/token';
 const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar';
 
 type AccessTokenState = { token: string; expiresAt: number } | null;
 let accessToken: AccessTokenState = null;
+
+class GoogleApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly responseBody: string,
+    readonly path: string
+  ) {
+    super(
+      `Google Calendar API request failed (${status}) for ${path}: ${responseBody}`
+    );
+    this.name = 'GoogleApiError';
+  }
+}
 
 const base64Url = (input: Buffer | string) =>
   Buffer.from(input)
@@ -72,27 +88,43 @@ async function getAccessToken() {
 }
 
 async function googleRequest(path: string, init: RequestInit = {}) {
-  const token = await getAccessToken();
-  const response = await fetch(
-    `https://www.googleapis.com/calendar/v3/${path}`,
+  return withRetry(
+    async () => {
+      const token = await getAccessToken();
+      const response = await fetch(
+        `https://www.googleapis.com/calendar/v3/${path}`,
+        {
+          ...init,
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            ...(init.headers as Record<string, string> | undefined),
+          },
+        }
+      );
+
+      if (!response.ok) {
+        const body = await response.text();
+        throw new GoogleApiError(response.status, body, path);
+      }
+
+      return response;
+    },
     {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        ...(init.headers as Record<string, string> | undefined),
+      retries: 2,
+      delayMs: 1000,
+      shouldRetry(error) {
+        if (!(error instanceof GoogleApiError)) return false;
+        return error.status === 429 || error.status >= 500;
+      },
+      onRetry(error, attempt, delayMs) {
+        console.warn(
+          `Google API request failed (attempt ${attempt}). Retrying in ${delayMs}ms...`,
+          error
+        );
       },
     }
   );
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(
-      `Google Calendar API request failed (${response.status}): ${message}`
-    );
-  }
-
-  return response;
 }
 
 async function deleteEventsBetween(
@@ -154,15 +186,11 @@ async function insertEvents(events: ReturnType<typeof buildCalendarEvents>) {
 
 export async function syncGoogleCalendar(lectures: Lecture[]) {
   const events = buildCalendarEvents(lectures);
-  if (events.length === 0) return { inserted: 0, deleted: 0 };
+  const timeMin = `${START_YYYYMMDD.slice(0, 4)}-${START_YYYYMMDD.slice(4, 6)}-${START_YYYYMMDD.slice(6, 8)}T00:00:00+09:00`;
+  const timeMax = `${END_YYYYMMDD.slice(0, 4)}-${END_YYYYMMDD.slice(4, 6)}-${END_YYYYMMDD.slice(6, 8)}T23:59:59+09:00`;
 
-  const [firstEvent] = events;
-  const lastEvent = events.at(-1)!;
-
-  const deleted = await deleteEventsBetween(
-    firstEvent.start.dateTime,
-    lastEvent.end.dateTime
-  );
+  const deleted = await deleteEventsBetween(timeMin, timeMax);
+  if (events.length === 0) return { inserted: 0, deleted };
   await insertEvents(events);
 
   return { inserted: events.length, deleted };

@@ -37,6 +37,29 @@ function iCalDateStringToDateObject(date: string) {
   return new Date(dateString);
 }
 
+function canMergeLectures(
+  previousLecture: Exclude<ReconstructedLecture, null>,
+  lecture: Exclude<ReconstructedLecture, null>
+) {
+  if (previousLecture.name !== lecture.name) return false;
+  if (previousLecture.date !== lecture.date) return false;
+  if (previousLecture.lecturer !== lecture.lecturer) return false;
+  if (
+    previousLecture.location &&
+    lecture.location &&
+    previousLecture.location !== lecture.location
+  ) {
+    return false;
+  }
+
+  const previousEnd = iCalDateStringToDateObject(previousLecture.endTime);
+  const currentStart = iCalDateStringToDateObject(lecture.startTime);
+  const diffMinutes = (currentStart.getTime() - previousEnd.getTime()) / 60000;
+
+  // 제주대 교시는 보통 10분 쉬는 시간을 포함하므로 15분 이하 간격만 연강으로 본다.
+  return diffMinutes >= 0 && diffMinutes <= 15;
+}
+
 export function reconstructedLecture(
   lecture: Lecture,
   status: LectureStatus
@@ -65,10 +88,7 @@ export function mergeLectures(lectures: ReconstructedLecture[]) {
       if (reducing.length === 0) return [lecture];
       const previousLecture = reducing.at(-1)!;
 
-      if (
-        previousLecture.name === lecture.name &&
-        previousLecture.date === lecture.date
-      ) {
+      if (canMergeLectures(previousLecture, lecture)) {
         const status = (() => {
           if (previousLecture.status !== '일반') return previousLecture.status;
           if (lecture.status !== '일반') return lecture.status;
