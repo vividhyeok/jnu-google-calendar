@@ -4,6 +4,13 @@
 
 이 프로젝트는 안드로이드/윈도우 사용자 기준으로 운영하기 쉽도록 구성되어 있습니다.
 
+## 0. 가장 중요한 점 (권장 모드)
+
+- 이 프로젝트의 기본 사용 방식은 `GitHub Actions` 자동 실행입니다.
+- 이 경우 로컬 PC에서 Node.js를 계속 실행할 필요가 없습니다.
+- Node.js가 필요한 경우는 `로컬에서 직접 실행`할 때만입니다.
+- 현재 자동 실행 스케줄은 `매일 KST 10:00`입니다.
+
 ## 1. 동작 방식
 
 1. 포털 로그인 후 기간(`START_YYYYMMDD` ~ `END_YYYYMMDD`)의 `classTables` 데이터를 조회합니다.
@@ -13,11 +20,14 @@
 
 ## 2. 사전 준비
 
+공통:
+1. Google 계정
+2. 제주대학교 포털 계정
+3. 동기화용 Google Calendar 1개
+4. Google Cloud 서비스 계정 1개
+
+로컬 실행 시에만 추가:
 1. Node.js 22 이상
-2. Google 계정
-3. 제주대학교 포털 계정
-4. 동기화용 Google Calendar 1개
-5. Google Cloud 서비스 계정 1개
 
 ## 3. Google Calendar/Service Account 설정
 
@@ -30,7 +40,9 @@
 7. JSON의 `client_email`, `private_key`를 환경변수에 사용합니다.
 8. Google Calendar 공유 설정에서 서비스 계정 이메일에 `변경 및 공유 관리` 권한을 부여합니다.
 
-## 4. 로컬 실행 (Windows 기준)
+## 4. 로컬 실행 (선택 사항, Windows 기준)
+
+아래는 GitHub Actions를 쓰지 않고 직접 PC에서 돌리고 싶을 때만 필요합니다.
 
 1. 저장소 이동 후 의존성 설치
 
