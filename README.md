@@ -1,211 +1,148 @@
-﻿# 📅 제주대학교 시간표 → Google Calendar 자동 동기화
+# 제주대학교 시간표 -> Google Calendar 자동 동기화
 
-제주대학교 포털 시간표 API를 읽어 Google Calendar에 자동 반영하는 프로젝트입니다.
+제주대학교 포털 시간표를 Google Calendar에 자동 반영하는 프로젝트입니다.
 
-## 0) 먼저 결론
+기본 운영 방식은 GitHub Actions 자동 실행이며, 로컬 PC에서 프로그램을 계속 켜둘 필요가 없습니다.
 
-- 권장 운영 방식: `GitHub Actions` 자동 실행
-- 이 방식에서는 로컬 PC에서 프로그램을 계속 켜둘 필요가 없습니다.
-- 현재 자동 스케줄: `매일 KST 10:00` (`cron: 0 1 * * *`, UTC 기준)
+## 1. 이미 예전에 설정해둔 경우
 
-## 1) 꼭 해야 하는 설정이 최소인지?
+대부분은 삭제/재설정할 필요 없이 날짜만 바꾸면 됩니다.
 
-네, 현재 구조에서 아래 항목은 사실상 필수입니다.
+1. GitHub 저장소 `Settings` 클릭
+2. `Secrets and variables` -> `Actions` 클릭
+3. `Repository variables`에서 아래 2개만 수정
+- `START_YYYYMMDD`
+- `END_YYYYMMDD`
+4. 저장소 `Actions` 탭 -> `cron` 워크플로 -> `Run workflow` 수동 실행
+5. 캘린더 반영 확인
 
-1. 제주대 포털 계정 2개 값
+다시 설정이 필요한 경우:
+- 서비스 계정(JSON 키)을 새로 만들었을 때
+- `GOOGLE_CLIENT_EMAIL` 또는 `GOOGLE_PRIVATE_KEY`를 바꿨을 때
+- 캘린더를 새로 만들고 `GOOGLE_CALENDAR_ID`가 바뀌었을 때
+
+## 2. 꼭 필요한 설정이 최소인지
+
+현재 구조에서 필수값은 아래 7개입니다.
+
+1. 포털 인증
 - `PORTAL_USERNAME`
 - `PORTAL_PASSWORD`
 
-2. Google 서비스 계정/캘린더 연결 3개 값
+2. Google 인증/대상 캘린더
 - `GOOGLE_CLIENT_EMAIL`
 - `GOOGLE_PRIVATE_KEY`
 - `GOOGLE_CALENDAR_ID`
 
-3. 조회 기간 2개 값
+3. 조회 기간
 - `START_YYYYMMDD`
 - `END_YYYYMMDD`
 
-총 7개입니다. 
-이 중 1, 2번은 외부 시스템 인증이라 줄이기 어렵고, 3번(기간)은 학기마다 한 번 변경하면 됩니다.
+인증값은 외부 서비스 요구사항이라 더 줄이기 어렵고, 보통 학기마다 바꾸는 값은 기간 2개뿐입니다.
 
-## 2) 빠른 체크리스트 (자동 모드)
+## 3. 서비스 계정 공유 설정이 필요한지 판단
 
-아래 6단계만 끝내면 됩니다.
+### 케이스 A (일반적): 캘린더 소유자가 본인 Gmail 계정
 
-1. Google Calendar에 동기화 전용 캘린더 생성
-2. Google Cloud 프로젝트 생성
-3. Google Calendar API 활성화
-4. 서비스 계정 생성 + JSON 키 발급
-5. 캘린더에 서비스 계정 권한 부여
-6. GitHub Actions Secrets/Variables 입력 후 워크플로 실행
+- 서비스 계정 이메일(`client_email`)을 캘린더 공유 목록에 추가해야 합니다.
+- 권한은 `변경 및 공유 관리(Manage changes and sharing)` 권장
 
----
+### 케이스 B: 캘린더 소유자 자체가 서비스 계정
 
-## 3) 상세 설정 가이드 (버튼 단위)
+- 서비스 계정과 캘린더 소유자가 동일하면 별도 공유 추가가 필요 없습니다.
 
-### 3-1) Google Calendar 동기화 전용 캘린더 만들기
+### 본인 상태 확인 방법
 
-1. 브라우저에서 `https://calendar.google.com` 접속
-2. 왼쪽 메뉴에서 `다른 캘린더` 오른쪽 `+` 클릭
+Google Calendar 설정 화면에서 대상 캘린더의 `공유 대상(Shared with)`을 확인하세요.
+
+- 서비스 계정이 이미 보이면 추가 설정 없이 진행
+- 현재 스크린샷처럼 서비스 계정이 공유 목록에 있고 권한도 부여되어 있으면 정상
+
+## 4. 처음 설정하는 방법 (버튼 순서)
+
+## 4-1. 동기화용 Google Calendar 준비
+
+1. https://calendar.google.com 접속
+2. 왼쪽 `다른 캘린더` 옆 `+` 클릭
 3. `새 캘린더 만들기` 클릭
-4. 캘린더 이름 입력 (예: `JNU Timetable Sync`)
-5. `캘린더 만들기` 클릭
-6. 생성 후 왼쪽 메뉴 `내 캘린더 설정`에서 방금 만든 캘린더 클릭
-7. 아래로 내려 `캘린더 통합` 섹션에서 `캘린더 ID` 복사
-8. 이 값을 나중에 `GOOGLE_CALENDAR_ID`로 사용
+4. 이름 입력 후 생성
+5. 생성한 캘린더 `설정 및 공유`로 이동
+6. `캘린더 통합` 섹션에서 `캘린더 ID` 복사
+- 이 값을 `GOOGLE_CALENDAR_ID`로 사용
 
-참고 링크:
-- Google Calendar: https://calendar.google.com
+## 4-2. Google Cloud 서비스 계정 준비
 
-### 3-2) Google Cloud 프로젝트 만들기
-
-1. `https://console.cloud.google.com/projectcreate` 접속
-2. `새 프로젝트` 화면에서 프로젝트 이름 입력 (예: `jnu-calendar-sync`)
-3. `만들기` 클릭
-4. 상단 프로젝트 선택기가 방금 만든 프로젝트로 선택됐는지 확인
-
-### 3-3) Google Calendar API 활성화
-
-1. 아래 링크로 이동 (프로젝트 선택 상태에서 열기)
-- https://console.cloud.google.com/apis/library/calendar-json.googleapis.com
-2. `Google Calendar API` 페이지에서 `사용(Enable)` 버튼 클릭
-3. 이미 활성화된 경우 `관리(Manage)`가 보이면 정상
-
-### 3-4) 서비스 계정 만들기 + JSON 키 발급
-
-1. `https://console.cloud.google.com/iam-admin/serviceaccounts` 접속
-2. 상단 `서비스 계정 만들기` 클릭
-3. `서비스 계정 이름` 입력 (예: `jnu-calendar-bot`)
-4. `만들고 계속하기` 클릭
-5. 역할 선택 화면은 비워두고 `계속` 클릭
-6. `완료` 클릭
-7. 생성된 서비스 계정 클릭
-8. 상단 탭 `키(Keys)` 클릭
-9. `키 추가` -> `새 키 만들기` 클릭
-10. `JSON` 선택 후 `만들기` 클릭
-11. JSON 파일 다운로드 확인
-
-JSON 파일에서 필요한 값:
+1. https://console.cloud.google.com/projectcreate 에서 프로젝트 생성
+2. https://console.cloud.google.com/apis/library/calendar-json.googleapis.com 에서 `Google Calendar API` 활성화
+3. https://console.cloud.google.com/iam-admin/serviceaccounts 이동
+4. `서비스 계정 만들기` 클릭
+5. 계정 생성 후 상세 화면 진입
+6. `키` 탭 -> `키 추가` -> `새 키 만들기` -> `JSON` 선택 -> 생성
+7. 내려받은 JSON 파일에서 아래 값 확보
 - `client_email` -> `GOOGLE_CLIENT_EMAIL`
 - `private_key` -> `GOOGLE_PRIVATE_KEY`
 
-### 3-5) 캘린더에 서비스 계정 권한 부여
+## 4-3. 캘린더 공유 설정 (필요한 경우만)
 
-1. `https://calendar.google.com` 다시 이동
-2. 왼쪽에서 동기화용 캘린더 선택 -> `설정 및 공유`
-3. `특정 사용자 및 그룹과 공유` 섹션으로 이동
-4. `사용자 및 그룹 추가` 클릭
-5. 서비스 계정 이메일(`client_email`) 입력
-6. 권한을 `변경 및 공유 관리`로 선택
-7. `전송` 또는 `저장`
+케이스 A(캘린더 소유자 != 서비스 계정)인 경우만 진행:
+
+1. 캘린더 `설정 및 공유` 화면
+2. `특정 사용자 및 그룹과 공유`에서 `사용자 및 그룹 추가`
+3. 서비스 계정 이메일(`client_email`) 입력
+4. 권한 `변경 및 공유 관리` 선택 후 저장
+
+케이스 B(소유자 == 서비스 계정)이면 이 단계 생략
+
+## 4-4. GitHub Actions 값 입력
+
+저장소 -> `Settings` -> `Secrets and variables` -> `Actions`
+
+`Repository secrets`에 추가:
+- `PORTAL_USERNAME`
+- `PORTAL_PASSWORD`
+- `GOOGLE_CLIENT_EMAIL`
+- `GOOGLE_PRIVATE_KEY`
+- `GOOGLE_CALENDAR_ID`
+
+`Repository variables`에 추가:
+- `START_YYYYMMDD` (예: `20260302`)
+- `END_YYYYMMDD` (예: `20260630`)
 
 주의:
-- 이 권한이 없으면 이벤트 생성/수정이 실패합니다.
+- `GOOGLE_PRIVATE_KEY`는 줄바꿈이 포함된 원문 그대로 입력하거나 `\n` 이스케이프 문자열로 입력
 
-### 3-6) GitHub 저장소 설정
+## 4-5. 첫 실행
 
-#### A. 저장소 준비
+1. 저장소 `Actions` 탭
+2. 왼쪽 `cron` 워크플로 선택
+3. 오른쪽 `Run workflow` 클릭
+4. 완료 로그에서 동기화 성공 확인
+5. Google Calendar에서 이벤트 생성 확인
 
-1. 이 저장소를 본인 계정으로 `Fork`하거나 본인 저장소로 Push
-2. GitHub 저장소 페이지로 이동
+## 5. 자동 업데이트 방식
 
-#### B. Secrets 입력
+- 워크플로: `.github/workflows/cron.yml`
+- 스케줄: `0 1 * * *` (UTC)
+- 한국 시간: 매일 오전 10시 (KST)
 
-1. 저장소 상단 `Settings` 클릭
-2. 왼쪽 메뉴 `Secrets and variables` -> `Actions` 클릭
-3. `Repository secrets` 영역에서 `New repository secret` 클릭
-4. 아래 항목을 각각 추가
+포털 데이터(휴강/보강 포함)가 바뀌면 다음 자동 실행에서 캘린더도 갱신됩니다.
 
-- `PORTAL_USERNAME` = 제주대 포털 아이디
-- `PORTAL_PASSWORD` = 제주대 포털 비밀번호
-- `GOOGLE_CLIENT_EMAIL` = JSON의 `client_email`
-- `GOOGLE_PRIVATE_KEY` = JSON의 `private_key` 값 전체
-- `GOOGLE_CALENDAR_ID` = 3-1에서 복사한 캘린더 ID
+## 6. 자주 묻는 질문
 
-팁:
-- `GOOGLE_PRIVATE_KEY`는 JSON 원본의 `\n`이 포함된 문자열 그대로 붙여넣어도 됩니다.
+### Q1. 매 학기마다 뭘 바꿔야 하나요?
 
-#### C. Variables 입력
+보통 `START_YYYYMMDD`, `END_YYYYMMDD` 두 값만 바꾸면 됩니다.
 
-1. 같은 화면에서 `Repository variables` 영역의 `New repository variable` 클릭
-2. 아래 항목 추가
+### Q2. 기존 설정을 삭제하고 다시 해야 하나요?
 
-- `START_YYYYMMDD` = 예: `20250901`
-- `END_YYYYMMDD` = 예: `20251231`
+아니요. 기존 동기화가 정상 동작 중이면 재설정 불필요합니다.
 
-학기 바뀔 때 보통 이 2개만 바꾸면 됩니다.
+### Q3. 서비스 계정 이메일 공유를 꼭 해야 하나요?
 
-참고 링크:
-- GitHub Secrets: https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions
-- GitHub Variables: https://docs.github.com/en/actions/learn-github-actions/variables
+- 캘린더 소유자가 본인 계정이면 해야 합니다.
+- 캘린더 소유자와 서비스 계정이 동일하면 생략 가능합니다.
 
-### 3-7) 자동 워크플로 실행 및 확인
+### Q4. 로컬에서 Node.js가 꼭 필요한가요?
 
-1. 저장소 상단 `Actions` 탭 클릭
-2. 좌측 워크플로 목록에서 `cron` 클릭
-3. 우측 `Run workflow` 클릭
-4. 브랜치 `main` 선택 후 `Run workflow` 버튼 클릭
-5. 실행이 끝나면 로그에서 `Google Calendar synced` 메시지 확인
-
-성공 확인:
-1. `https://calendar.google.com` 접속
-2. 동기화 대상 캘린더 표시 ON
-3. `START_YYYYMMDD ~ END_YYYYMMDD` 범위에 수업 일정 생성 확인
-
----
-
-## 4) 자동 업데이트 방식
-
-- GitHub Actions가 매일 정해진 시간에 실행됩니다.
-- 실행 시마다 포털 API 최신 상태를 다시 읽어 캘린더를 갱신합니다.
-- 휴강/보강 변경은 포털 데이터에 반영된 다음 실행에서 자동 반영됩니다.
-
-워크플로 파일:
-- `.github/workflows/cron.yml`
-
----
-
-## 5) 자주 막히는 지점
-
-1. 일정이 생성되지 않음
-- 서비스 계정이 캘린더에 `변경 및 공유 관리` 권한인지 확인
-- `GOOGLE_CALENDAR_ID`가 맞는 캘린더 ID인지 확인
-
-2. 포털 로그인 실패
-- `PORTAL_USERNAME`, `PORTAL_PASSWORD` 오타 확인
-
-3. 일부 기간만 보임
-- `START_YYYYMMDD`, `END_YYYYMMDD` 값 확인
-- 학기 변경 시 두 변수 업데이트 필요
-
-4. 워크플로가 실행 안 됨
-- 저장소 `Actions` 활성화 여부 확인
-
----
-
-## 6) 로컬 실행은 언제 필요한가? (선택)
-
-- GitHub Actions를 못 쓰는 환경에서만 사용
-- 평소 자동 운영에는 필요 없음
-
-로컬 실행이 필요한 경우에만:
-
-```powershell
-npm install
-Copy-Item .env.example .env.local
-npm run sync
-```
-
----
-
-## 7) 추가 개선 여지 (설정 더 줄이기)
-
-현재도 필수 항목 위주지만, 더 줄일 여지는 있습니다.
-
-1. `GOOGLE_CLIENT_EMAIL` + `GOOGLE_PRIVATE_KEY`를
-하나의 `GOOGLE_SERVICE_ACCOUNT_JSON` Secret으로 합치기
-
-2. 학기 기간(`START_YYYYMMDD`, `END_YYYYMMDD`)을
-워크플로 입력값 또는 자동 계산으로 단순화
-
-원하면 다음 단계로 이 2개도 코드에 바로 반영해 드릴 수 있습니다.
+GitHub Actions 자동 모드만 쓸 경우 필요 없습니다.
+로컬 수동 실행 시에만 필요합니다.
