@@ -23,6 +23,7 @@ jobs:
           PORTAL_PASSWORD: ${{ secrets.PORTAL_PASSWORD }}
           START_YYYYMMDD: ${{ vars.START_YYYYMMDD }}
           END_YYYYMMDD: ${{ vars.END_YYYYMMDD }}
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           GOOGLE_CLIENT_EMAIL: ${{ secrets.GOOGLE_CLIENT_EMAIL }}
           GOOGLE_PRIVATE_KEY: ${{ secrets.GOOGLE_PRIVATE_KEY }}
           GOOGLE_CALENDAR_ID: ${{ secrets.GOOGLE_CALENDAR_ID }}

@@ -6,8 +6,6 @@ dotenv.config();
 const requiredVariables = [
   'START_YYYYMMDD',
   'END_YYYYMMDD',
-  'GOOGLE_CLIENT_EMAIL',
-  'GOOGLE_PRIVATE_KEY',
   'GOOGLE_CALENDAR_ID',
 ] as const;
 
@@ -31,6 +29,41 @@ function requireEnv(keys: string[], label = keys[0]) {
     );
   }
   return value;
+}
+
+type ServiceAccountPayload = {
+  client_email?: string;
+  private_key?: string;
+};
+
+function resolveGoogleServiceAccount() {
+  const json = readEnv('GOOGLE_SERVICE_ACCOUNT_JSON');
+  if (json) {
+    let parsed: ServiceAccountPayload;
+    try {
+      parsed = JSON.parse(json) as ServiceAccountPayload;
+    } catch {
+      throw new Error(
+        'GOOGLE_SERVICE_ACCOUNT_JSON must be a valid JSON string from the service account key file'
+      );
+    }
+
+    if (!parsed.client_email || !parsed.private_key) {
+      throw new Error(
+        'GOOGLE_SERVICE_ACCOUNT_JSON must include client_email and private_key'
+      );
+    }
+
+    return {
+      clientEmail: parsed.client_email,
+      privateKey: parsed.private_key,
+    };
+  }
+
+  return {
+    clientEmail: requireEnv(['GOOGLE_CLIENT_EMAIL']),
+    privateKey: requireEnv(['GOOGLE_PRIVATE_KEY']),
+  };
 }
 
 function parseYyyymmdd(name: string, value: string) {
@@ -79,8 +112,9 @@ if (START_YYYYMMDD > END_YYYYMMDD) {
   );
 }
 
-const GOOGLE_CLIENT_EMAIL = process.env.GOOGLE_CLIENT_EMAIL!;
-const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY!;
+const serviceAccount = resolveGoogleServiceAccount();
+const GOOGLE_CLIENT_EMAIL = serviceAccount.clientEmail;
+const GOOGLE_PRIVATE_KEY = serviceAccount.privateKey;
 const GOOGLE_CALENDAR_ID = process.env.GOOGLE_CALENDAR_ID!;
 
 export {

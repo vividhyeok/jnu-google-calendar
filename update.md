@@ -2,6 +2,13 @@
 
 ## 2026-03-02 변경 내역
 
+### 0. 설정 단순화 (추가)
+
+- `GOOGLE_SERVICE_ACCOUNT_JSON` 단일 secret 지원 추가
+- 이제 `GOOGLE_CLIENT_EMAIL` + `GOOGLE_PRIVATE_KEY`를 따로 넣지 않아도 동작
+- 기존 분리 방식은 하위 호환으로 유지
+- README를 "내 이메일 vs client_email 차이" 중심으로 재작성
+
 ### 1. 실행/설정 편의성 개선
 
 - `npm run sync`(1회 실행) 스크립트 추가
