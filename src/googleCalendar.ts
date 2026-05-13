@@ -16,6 +16,7 @@ const CALENDAR_SCOPE = 'https://www.googleapis.com/auth/calendar';
 
 type AccessTokenState = { token: string; expiresAt: number } | null;
 let accessToken: AccessTokenState = null;
+const MANAGED_BY = 'jnu-google-calendar-sync';
 
 class GoogleApiError extends Error {
   constructor(
@@ -127,12 +128,28 @@ async function googleRequest(path: string, init: RequestInit = {}) {
   );
 }
 
-async function deleteEventsBetween(
-  timeMin: string,
-  timeMax: string
-): Promise<number> {
+type CalendarEventLite = {
+  id?: string;
+  summary?: string;
+  description?: string;
+  location?: string;
+  start?: { dateTime?: string; timeZone?: string };
+  end?: { dateTime?: string; timeZone?: string };
+  extendedProperties?: { private?: { managedBy?: string; sourceKey?: string } };
+};
+
+function toEventId(sourceKey: string) {
+  const digest = crypto
+    .createHash('sha256')
+    .update(sourceKey)
+    .digest('hex')
+    .slice(0, 48);
+  return `jnu${digest}`;
+}
+
+async function listManagedEventsBetween(timeMin: string, timeMax: string) {
   const calendarId = encodeURIComponent(GOOGLE_CALENDAR_ID);
-  let deleted = 0;
+  const managedEvents: CalendarEventLite[] = [];
   let pageToken: string | undefined;
 
   do {
@@ -142,6 +159,7 @@ async function deleteEventsBetween(
       singleEvents: 'true',
       maxResults: '2500',
       orderBy: 'startTime',
+      privateExtendedProperty: `managedBy=${MANAGED_BY}`,
     });
     if (pageToken) params.set('pageToken', pageToken);
 
@@ -150,38 +168,83 @@ async function deleteEventsBetween(
     );
     const body = (await response.json()) as {
       nextPageToken?: string;
-      items?: { id?: string }[];
+      items?: CalendarEventLite[];
     };
-
-    for (const event of body.items ?? []) {
-      if (!event.id) continue;
-      await googleRequest(
-        `calendars/${calendarId}/events/${encodeURIComponent(event.id)}`,
-        { method: 'DELETE' }
-      );
-      deleted += 1;
-    }
+    managedEvents.push(...(body.items ?? []));
 
     pageToken = body.nextPageToken;
   } while (pageToken);
 
-  return deleted;
+  return managedEvents;
 }
 
-async function insertEvents(events: ReturnType<typeof buildCalendarEvents>) {
+function isSameEvent(
+  remote: CalendarEventLite | undefined,
+  local: ReturnType<typeof buildCalendarEvents>[number]
+) {
+  if (!remote) return false;
+  return (
+    remote.summary === local.summary &&
+    (remote.description ?? '') === local.description &&
+    (remote.location ?? '') === (local.location ?? '') &&
+    remote.start?.dateTime === local.start.dateTime &&
+    remote.end?.dateTime === local.end.dateTime &&
+    remote.start?.timeZone === local.start.timeZone &&
+    remote.end?.timeZone === local.end.timeZone
+  );
+}
+
+async function upsertEvents(events: ReturnType<typeof buildCalendarEvents>) {
   const calendarId = encodeURIComponent(GOOGLE_CALENDAR_ID);
+  let inserted = 0;
+
   for (const event of events) {
-    await googleRequest(`calendars/${calendarId}/events`, {
-      method: 'POST',
-      body: JSON.stringify({
-        summary: event.summary,
-        description: event.description,
-        start: event.start,
-        end: event.end,
-        ...(event.location ? { location: event.location } : {}),
-      }),
+    const eventId = toEventId(event.sourceKey);
+    const body = {
+      summary: event.summary,
+      description: event.description,
+      start: event.start,
+      end: event.end,
+      ...(event.location ? { location: event.location } : {}),
+      extendedProperties: {
+        private: {
+          managedBy: MANAGED_BY,
+          sourceKey: event.sourceKey,
+        },
+      },
+    };
+
+    await googleRequest(`calendars/${calendarId}/events/${eventId}`, {
+      method: 'PUT',
+      body: JSON.stringify(body),
     });
+    inserted += 1;
   }
+
+  return inserted;
+}
+
+async function deleteStaleEvents(
+  remoteEvents: CalendarEventLite[],
+  localEvents: ReturnType<typeof buildCalendarEvents>
+) {
+  const calendarId = encodeURIComponent(GOOGLE_CALENDAR_ID);
+  const localIds = new Set(localEvents.map((event) => toEventId(event.sourceKey)));
+  let deleted = 0;
+
+  for (const remoteEvent of remoteEvents) {
+    if (!remoteEvent.id || localIds.has(remoteEvent.id)) continue;
+
+    await googleRequest(
+      `calendars/${calendarId}/events/${encodeURIComponent(remoteEvent.id)}`,
+      {
+        method: 'DELETE',
+      }
+    );
+    deleted += 1;
+  }
+
+  return deleted;
 }
 
 export async function syncGoogleCalendar(lectures: Lecture[]) {
@@ -189,9 +252,19 @@ export async function syncGoogleCalendar(lectures: Lecture[]) {
   const timeMin = `${START_YYYYMMDD.slice(0, 4)}-${START_YYYYMMDD.slice(4, 6)}-${START_YYYYMMDD.slice(6, 8)}T00:00:00+09:00`;
   const timeMax = `${END_YYYYMMDD.slice(0, 4)}-${END_YYYYMMDD.slice(4, 6)}-${END_YYYYMMDD.slice(6, 8)}T23:59:59+09:00`;
 
-  const deleted = await deleteEventsBetween(timeMin, timeMax);
-  if (events.length === 0) return { inserted: 0, deleted };
-  await insertEvents(events);
+  const remoteEvents = await listManagedEventsBetween(timeMin, timeMax);
+  const remoteById = new Map(
+    remoteEvents.filter((event) => event.id).map((event) => [event.id!, event])
+  );
 
-  return { inserted: events.length, deleted };
+  const changedEvents = events.filter((event) => {
+    const eventId = toEventId(event.sourceKey);
+    const remoteEvent = remoteById.get(eventId);
+    return !isSameEvent(remoteEvent, event);
+  });
+
+  const inserted = await upsertEvents(changedEvents);
+  const deleted = await deleteStaleEvents(remoteEvents, events);
+
+  return { inserted, deleted };
 }

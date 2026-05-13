@@ -4,6 +4,7 @@ import { mergeLectures, toReconstructedLectures } from './iCalConverter';
 const ASIA_SEOUL = 'Asia/Seoul';
 
 export type CalendarEventPayload = {
+  sourceKey: string;
   summary: string;
   description: string;
   start: { dateTime: string; timeZone: typeof ASIA_SEOUL };
@@ -27,6 +28,9 @@ export function buildCalendarEvents(lectures: Lecture[]) {
       .join('\n');
 
     return {
+      sourceKey: `${lecture.name}|${lecture.status}|${lecture.lecturer}|${
+        lecture.location ?? ''
+      }|${lecture.startTime}|${lecture.endTime}`,
       summary,
       description,
       start: {

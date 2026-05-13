@@ -101,6 +101,8 @@ describe('강의 데이터 처리하기', () => {
     const events = buildCalendarEvents([cases.online.input]);
     expect(events).toEqual([
       {
+        sourceKey:
+          '소프트웨어분석및설계|온라인(녹화)|김수균||20240909T100000|20240909T105000',
         summary: '소프트웨어분석및설계 - 온라인(녹화)',
         description: '담당: 김수균',
         start: {
