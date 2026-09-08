@@ -1,5 +1,33 @@
 import type { Lecture } from './response';
 
+const HTML_ENTITIES: Record<string, string> = {
+  amp: '&',
+  lt: '<',
+  gt: '>',
+  quot: '"',
+  apos: "'",
+  nbsp: ' ',
+  middot: '·',
+};
+
+function decodePortalText(value: string) {
+  return value.replace(/&(#x[0-9a-f]+|#\d+|[a-z][a-z0-9]+);/gi, (match, entity: string) => {
+    if (entity.startsWith('#x')) {
+      const codePoint = Number.parseInt(entity.slice(2), 16);
+      return Number.isInteger(codePoint) && codePoint <= 0x10ffff
+        ? String.fromCodePoint(codePoint)
+        : match;
+    }
+    if (entity.startsWith('#')) {
+      const codePoint = Number.parseInt(entity.slice(1), 10);
+      return Number.isInteger(codePoint) && codePoint <= 0x10ffff
+        ? String.fromCodePoint(codePoint)
+        : match;
+    }
+    return HTML_ENTITIES[entity.toLowerCase()] ?? match;
+  });
+}
+
 export function parseLectureStatus(lecture: Lecture): LectureStatus {
   const hasLeadingNine = (str: string | null) => str?.[0] == '9';
 
@@ -74,11 +102,11 @@ export function reconstructedLecture(
     startTime,
     endTime,
     date: lecture.lsnYmd,
-    name: lecture.sbjctNm,
-    lecturer: lecture.empnm,
+    name: decodePortalText(lecture.sbjctNm),
+    lecturer: decodePortalText(lecture.empnm),
     ...(status == '온라인(실시간)' || status == '온라인(녹화)'
       ? { status, location: null }
-      : { status, location: lecture.lctrmNm }),
+      : { status, location: lecture.lctrmNm ? decodePortalText(lecture.lctrmNm) : lecture.lctrmNm }),
   };
 }
 
