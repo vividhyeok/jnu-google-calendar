@@ -18,7 +18,7 @@ jobs:
       - run: pnpm test
       - run: pnpm typecheck
       - run: pnpm build
-      - run: bash -n scripts/deploy.sh scripts/schedule.sh
+      - run: bash -n scripts/deploy.sh scripts/schedule.sh scripts/deploy-canvas-watch.sh
       - run: docker build -t jnu-calendar-test .
       - name: Container exits unsuccessfully without configuration
         run: |
