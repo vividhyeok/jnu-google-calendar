@@ -56,6 +56,12 @@ gcloud run jobs add-iam-policy-binding "$JOB" \
   --role="roles/run.invoker" \
   --quiet >/dev/null
 
+# Establish the initial baseline and verify Canvas API/ICS/Storage before enabling automation.
+gcloud run jobs execute "$JOB" \
+  --project="$PROJECT" \
+  --region="$REGION" \
+  --wait
+
 # Run 4x/day. The watcher itself guarantees at most one D-0..D-3 reminder summary per KST day.
 URI="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT}/jobs/${JOB}:run"
 if gcloud scheduler jobs describe "$SCHEDULER" --project="$PROJECT" --location="$REGION" >/dev/null 2>&1; then
@@ -75,5 +81,5 @@ gcloud scheduler jobs "$SCHED_ACTION" http "$SCHEDULER" \
   --oauth-token-scope="https://www.googleapis.com/auth/cloud-platform" \
   --quiet
 
-echo "Canvas watcher deployed: ${JOB}"
+echo "Canvas watcher deployed and scheduled: ${JOB}"
 echo "State bucket: gs://${BUCKET}"
