@@ -49,6 +49,13 @@ gcloud run jobs "$ACTION" "$JOB" \
   --task-timeout=5m \
   --quiet
 
+gcloud run jobs add-iam-policy-binding "$JOB" \
+  --project="$PROJECT" \
+  --region="$REGION" \
+  --member="serviceAccount:${SCHEDULER_SA}" \
+  --role="roles/run.invoker" \
+  --quiet >/dev/null
+
 # Run 4x/day. The watcher itself guarantees at most one D-0..D-3 reminder summary per KST day.
 URI="https://${REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${PROJECT}/jobs/${JOB}:run"
 if gcloud scheduler jobs describe "$SCHEDULER" --project="$PROJECT" --location="$REGION" >/dev/null 2>&1; then
