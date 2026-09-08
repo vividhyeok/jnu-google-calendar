@@ -124,6 +124,10 @@ describe('강의 데이터 처리하기', () => {
       sbjctNm: '정보&middot;컴퓨터교과논리및논술',
       empnm: '김&amp;성백',
       lctrmNm: '사범2호&#50;326',
+      cclctYn: 'N',
+      splctYn: 'N',
+      aftrSplctLttmSe: null,
+      untactLsnMthdSe: null,
     };
 
     const [event] = buildCalendarEvents([input]);
