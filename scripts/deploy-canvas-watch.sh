@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
+set +x
 
-PROJECT="${PROJECT:-jnu-calendar-507911}"
-REGION="${REGION:-asia-northeast3}"
+PROJECT="${1:-${PROJECT:-$(gcloud config get-value project 2>/dev/null || true)}}"
+REGION="${2:-${REGION:-asia-northeast3}}"
+[[ -n "$PROJECT" && "$PROJECT" != "(unset)" ]] || {
+  echo "Project ID is required. Usage: bash scripts/deploy-canvas-watch.sh PROJECT_ID [REGION]" >&2
+  exit 1
+}
+[[ "$PROJECT" =~ ^[a-z][a-z0-9-]{4,28}[a-z0-9]$ ]] || { echo "Invalid project ID" >&2; exit 1; }
+[[ "$REGION" =~ ^[a-z]+-[a-z]+[0-9]+$ ]] || { echo "Invalid region" >&2; exit 1; }
+
 JOB="${CANVAS_JOB:-jnu-canvas-watch}"
 SCHEDULER="${CANVAS_SCHEDULER:-jnu-canvas-watch}"
 RUNTIME_SA="${RUNTIME_SA:-jnu-calendar@${PROJECT}.iam.gserviceaccount.com}"
@@ -10,14 +18,48 @@ SCHEDULER_SA="${SCHEDULER_SA:-jnu-scheduler@${PROJECT}.iam.gserviceaccount.com}"
 BUCKET="${CANVAS_STATE_BUCKET:-${PROJECT}-canvas-watch-state}"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/cloud-run-source-deploy/jnu-calendar:canvas-watch-$(date +%Y%m%d%H%M%S)"
 
-for secret in jnu-canvas-api-token jnu-canvas-ics-url jnu-discord-webhook; do
-  gcloud secrets describe "$secret" --project="$PROJECT" >/dev/null
-  gcloud secrets add-iam-policy-binding "$secret" \
+# The Canvas watcher reuses service accounts created by scripts/deploy.sh.
+for account in "$RUNTIME_SA" "$SCHEDULER_SA"; do
+  gcloud iam service-accounts describe "$account" --project="$PROJECT" >/dev/null 2>&1 || {
+    echo "Missing service account: $account" >&2
+    echo "Run the timetable setup first: bash scripts/deploy.sh $PROJECT $REGION" >&2
+    exit 1
+  }
+done
+
+ensure_secret() {
+  local name="$1" prompt="$2" value
+  if ! gcloud secrets describe "$name" --project="$PROJECT" >/dev/null 2>&1; then
+    read -r -s -p "$prompt (input hidden): " value
+    printf '\n'
+    [[ -n "$value" ]] || { echo "$prompt is required" >&2; exit 1; }
+    gcloud secrets create "$name" --project="$PROJECT" --replication-policy=automatic >/dev/null
+    printf '%s' "$value" | gcloud secrets versions add "$name" --project="$PROJECT" --data-file=- >/dev/null
+    unset value
+  fi
+  gcloud secrets add-iam-policy-binding "$name" \
     --project="$PROJECT" \
     --member="serviceAccount:${RUNTIME_SA}" \
     --role="roles/secretmanager.secretAccessor" \
     --quiet >/dev/null
-done
+}
+
+echo "Canvas secret input is hidden and is not stored in shell history."
+ensure_secret jnu-canvas-api-token CANVAS_API_TOKEN
+ensure_secret jnu-canvas-ics-url CANVAS_ICS_URL
+
+if ! gcloud secrets describe jnu-discord-webhook --project="$PROJECT" >/dev/null 2>&1; then
+  echo "Missing Discord webhook secret: jnu-discord-webhook" >&2
+  echo "The Canvas watcher sends notifications through Discord." >&2
+  echo "Rerun: bash scripts/deploy.sh $PROJECT $REGION" >&2
+  echo "and answer y to 'Enable Discord notifications?', then run this script again." >&2
+  exit 1
+fi
+gcloud secrets add-iam-policy-binding jnu-discord-webhook \
+  --project="$PROJECT" \
+  --member="serviceAccount:${RUNTIME_SA}" \
+  --role="roles/secretmanager.secretAccessor" \
+  --quiet >/dev/null
 
 gcloud storage buckets describe "gs://${BUCKET}" --project="$PROJECT" >/dev/null 2>&1 || \
   gcloud storage buckets create "gs://${BUCKET}" \
