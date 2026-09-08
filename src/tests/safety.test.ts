@@ -1,4 +1,4 @@
-import { parseLectureStatus } from '../iCalConverter';
+import { parseLectureStatus, toReconstructedLectures } from '../iCalConverter';
 import { afterEach, expect, test, vi } from 'vitest';
 import { getSyncRange } from '../dateRange';
 import { parsePortalResponse } from '../response';
@@ -19,6 +19,16 @@ test.each(['<html>login</html>','{}','null','{"classTables":null}','{"classTable
 });
 test('valid lecture round trip', () => {
   expect(parsePortalResponse(JSON.stringify({classTables:[cases.online.input]}))).toEqual([cases.online.input]);
+});
+test('accepts fully untimed portal rows and omits them from calendar reconstruction', () => {
+  const untimed = {
+    ...cases.online.input,
+    cclctYn:'N', splctYn:'N',
+    aftrSplctLttmSe:null, untactLsnMthdSe:null,
+    bgngHr:null, endHr:null,
+  };
+  expect(parsePortalResponse(JSON.stringify({classTables:[untimed]}))).toEqual([untimed]);
+  expect(toReconstructedLectures([untimed])).toEqual([]);
 });
 test.each([{lsnYmd:'20260230'},{bgngHr:null},{bgngHr:'25:00'},{endHr:'01:00'},{cclctYn:'unexpected'}])('rejects partial or invalid lecture %j', change => {
   expect(() => parsePortalResponse(JSON.stringify({classTables:[{...cases.online.input,...change}]}))).toThrow('schema');

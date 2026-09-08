@@ -57,7 +57,13 @@ export function parsePortalResponse(text: string): Lecture[] {
     if (!/^\d{8}$/.test(date) || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0,10) !== iso
       || !['Y','N'].includes(row.cclctYn) || !['Y','N'].includes(row.splctYn)
       || !row.sbjctNm.trim()) throw new Error('Portal schema error: invalid lecture fields');
-    if (row.cclctYn === 'Y' && !row.aftrSplctLttmSe?.startsWith('9') && row.bgngHr === null && row.endHr === null) continue;
+
+    // The portal emits asynchronous/e-learning and counselling rows with a valid
+    // date but no clock time at all. They are legitimate timetable rows and are
+    // intentionally filtered out later when creating calendar events.
+    if (row.bgngHr === null && row.endHr === null) continue;
+
+    // A partially missing time is still malformed and must fail closed.
     if (!row.bgngHr || !row.endHr || !/^([01]\d|2[0-3]):[0-5]\d$/.test(row.bgngHr)
       || !/^([01]\d|2[0-3]):[0-5]\d$/.test(row.endHr) || row.bgngHr >= row.endHr) {
       throw new Error('Portal schema error: invalid lecture time');
