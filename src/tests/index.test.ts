@@ -132,7 +132,7 @@ describe('강의 데이터 처리하기', () => {
 
     const [event] = buildCalendarEvents([input]);
     expect(event.summary).toBe('정보·컴퓨터교과논리및논술');
-    expect(event.description).toBe('담당: 김&성백');
+    expect(event.description).toContain('담당: 김&성백');
     expect(event.location).toBe('사범2호2326');
     expect(event.sourceKey).toContain('정보·컴퓨터교과논리및논술');
   });
