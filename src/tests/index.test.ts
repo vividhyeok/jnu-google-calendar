@@ -117,6 +117,25 @@ describe('강의 데이터 처리하기', () => {
       },
     ]);
   });
+
+  test('포털 HTML 엔티티를 캘린더 표시용 문자로 변환', () => {
+    const input = {
+      ...cases.merge.input[0],
+      sbjctNm: '정보&middot;컴퓨터교과논리및논술',
+      empnm: '김&amp;성백',
+      lctrmNm: '사범2호&#50;326',
+      cclctYn: 'N',
+      splctYn: 'N',
+      aftrSplctLttmSe: null,
+      untactLsnMthdSe: null,
+    };
+
+    const [event] = buildCalendarEvents([input]);
+    expect(event.summary).toBe('정보·컴퓨터교과논리및논술');
+    expect(event.description).toContain('담당: 김&성백');
+    expect(event.location).toBe('사범2호2326');
+    expect(event.sourceKey).toContain('정보·컴퓨터교과논리및논술');
+  });
 });
 
 describe('lectures to iCal event', () => {
